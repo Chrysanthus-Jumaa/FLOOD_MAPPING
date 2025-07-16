@@ -13,7 +13,7 @@ var after_end = '2023-03-23';
 
 // FILTERING MY IMPORTED SENTINEL-1 SAR IMAGERY
 var filteredS1 = s1
-  .filter(ee.Filter.eq('instrumentMode', 'IW')) //FETCHING IN INTERFERMETRIC WIDE MODE FOR MORE IMAGE COVERAGE
+  .filter(ee.Filter.eq('instrumentMode', 'IW')) //FETCHING IN INTERFEROMETRIC WIDE MODE FOR MORE IMAGE COVERAGE
   .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VH'))//UTILISING THE VH BAND
   .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VV'))//UTILISING THE VV BAND
   .filter(ee.Filter.eq('orbitProperties_pass','ASCENDING'))//OBTAINUNG IMAGES FROM THE ASCENDING PATH
@@ -108,6 +108,15 @@ var s2 = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
 var s2_before = s2.filterDate(before_start,before_end); // PRE FLOOD IMAGERY
 var s2_after = s2.filterDate(after_start,after_end);  // POST FLOOD IMAGERY
 
+var visparams = {
+  min:0.0,
+  max:3000,
+  bands:['B4','B3','B2']
+};
+
+Map.addLayer(s2_before.mean().clip(roi),visparams,'RGB BEFORE');
+Map.addLayer(s2_after.mean().clip(roi),visparams,'RGB AFTER');
+
 //CREATING FUNCTION TO GENERATE NDWI
 function computeNDWI(image) {
   return image.normalizedDifference(['B3', 'B8']).rename('NDWI');
@@ -152,5 +161,76 @@ var intersectionFloodMask2 = dynamicFlood.unmask(0)
   .selfMask();
 
 Map.addLayer(intersectionFloodMask2, {min: 0, max: 1, palette: ['purple']}, 'Flood Mask - Fused (Union)');
-//THE VARIOUS FLOOD MASKS CREATED ARE TWO VISUALISE THE BEST APPROACH TO TAKE. BASED ON RESULTS ABOVE, A COMBINATION OF FIRST FUSION FLOOD
+//THE VARIOUS FLOOD MASKS CREATED ARE TWO VISUALISE THE BEST APPROACH TO TAKE. 
+//BASED ON RESULTS ABOVE, A COMBINATION OF FIRST FUSION FLOOD
 //MASK AND THE SAR FLOOD MASK SEEMS PROFICIENT
+
+//AFTER CAREFUL VISUALISATION, THE COMBINATION OF SAR AND (SAR+NDWI) MASKED REALISTICALLY
+var consensusFlood1 = dynamicFlood.unmask(0)
+  .add(intersectionFloodMask1.unmask(0))
+  .gt(0)
+  .rename('Final_Flood_Mask')
+  .selfMask();
+
+Map.addLayer(consensusFlood1, {min: 0, max: 1, palette: ['darkred']}, 'Flood Mask - Consensus Zones');
+
+// EXPORTING THE FINAL AGREEABLE FLOOD MASK
+Export.image.toDrive({
+  image: consensusFlood1, 
+  description: 'FLOOD_MAPPING_EXPORT', 
+  folder: 'FINAL_FLOOD_MAPPING_PROJECT', 
+  fileNamePrefix: 'FINAL_FLOODED_AREAS', 
+  region: roi, 
+  scale: 10, 
+  crs: 'EPSG:4326', 
+  maxPixels: 1e10, 
+  });
+  
+// EXPORTING THE SAR IMAGERY BEFORE FLOODING
+Export.image.toDrive({
+  image: beforeclip, 
+  description: 'FLOOD_MAPPING_EXPORT', 
+  folder: 'FINAL_FLOOD_MAPPING_PROJECT', 
+  fileNamePrefix: 'PRE_FLOOD_SAR_IMAGE', 
+  region: roi, 
+  scale: 10, 
+  crs: 'EPSG:4326', 
+  maxPixels: 1e10, 
+  });
+  
+// EXPORTING THE SAR IMAGERY AFTER FLOODING
+Export.image.toDrive({
+  image: afterclip, 
+  description: 'FLOOD_MAPPING_EXPORT', 
+  folder: 'FINAL_FLOOD_MAPPING_PROJECT', 
+  fileNamePrefix: 'POST_FLOOD_SAR_IMAGE', 
+  region: roi, 
+  scale: 10, 
+  crs: 'EPSG:4326', 
+  maxPixels: 1e10, 
+  });
+  
+// EXPORTING THE SENTINEL2 MS IMAGERY BEFORE FLOODING
+Export.image.toDrive({
+  image: s2_before.mean().clip(roi).select('B4','B3','B2'), 
+  description: 'FLOOD_MAPPING_EXPORT', 
+  folder: 'FINAL_FLOOD_MAPPING_PROJECT', 
+  fileNamePrefix: 'PRE_FLOOD_SENTINEL2_MS_IMAGE', 
+  region: roi, 
+  scale: 10, 
+  crs: 'EPSG:4326', 
+  maxPixels: 1e10, 
+  });
+  
+// EXPORTING THE SENTINEL2 MS IMAGERY AFTER FLOODING
+Export.image.toDrive({
+  image: s2_after.mean().clip(roi).select('B4','B3','B2'), 
+  description: 'FLOOD_MAPPING_EXPORT', 
+  folder: 'FINAL_FLOOD_MAPPING_PROJECT', 
+  fileNamePrefix: 'POST_FLOOD_SENTINEL2_MS_IMAGE', 
+  region: roi, 
+  scale: 10, 
+  crs: 'EPSG:4326', 
+  maxPixels: 1e10, 
+  });
+
