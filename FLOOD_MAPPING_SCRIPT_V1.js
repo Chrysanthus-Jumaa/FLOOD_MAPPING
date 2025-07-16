@@ -13,7 +13,7 @@ var after_end = '2023-03-23';
 
 // FILTERING MY IMPORTED SENTINEL-1 SAR IMAGERY
 var filteredS1 = s1
-  .filter(ee.Filter.eq('instrumentMode', 'IW')) //FETCHING IN INTERFEROMETRIC WIDE MODE FOR MORE IMAGE COVERAGE
+  .filter(ee.Filter.eq('instrumentMode', 'IW')) //FETCHING IN INTERFERMETRIC WIDE MODE FOR MORE IMAGE COVERAGE
   .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VH'))//UTILISING THE VH BAND
   .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VV'))//UTILISING THE VV BAND
   .filter(ee.Filter.eq('orbitProperties_pass','ASCENDING'))//OBTAINUNG IMAGES FROM THE ASCENDING PATH
@@ -103,7 +103,7 @@ Map.addLayer(dynamicFlood, {min: 0, max: 1, palette: ['red']}, 'Flood Mask - Per
 //IMPORTING MY SENTINEL-2 IMAGERY
 var s2 = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
   .filterBounds(roi)//FILTER BOUNDS TO ROI
-  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 10)); // FETCH IMAGERY WITH LITTLE TO NO CLOUDS
+  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 5)); // FETCH IMAGERY WITH LITTLE TO NO CLOUDS
 
 var s2_before = s2.filterDate(before_start,before_end); // PRE FLOOD IMAGERY
 var s2_after = s2.filterDate(after_start,after_end);  // POST FLOOD IMAGERY
