@@ -3,7 +3,7 @@ var s1 = ee.ImageCollection("COPERNICUS/S1_GRD");
 
 // ADDING MY ROI TO THE VIEWPORT AND POSITIONING IT ACCORDINGLY FOR EASIER VIEW
 Map.addLayer(roi);
-Map.centerObject(roi, 16);
+Map.centerObject(roi, 13);
 
 // DEFINING MY PRE-FLOOD DATES AND POST-FLOOD DATES
 var before_start = '2017-07-15';
@@ -97,5 +97,60 @@ Map.addLayer(dynamicFlood, {min: 0, max: 1, palette: ['red']}, 'Flood Mask - Per
 //   fileNamePrefix:'THE_ROI',
 //   fileFormat: 'SHP'
 // });
-////////////////////////////UTILISING NDWI FOR FLOOD MAPPING/////////////////////////////
 
+
+////////////////////////////UTILISING NDWI FOR FLOOD MAPPING/////////////////////////////
+//IMPORTING MY SENTINEL-2 IMAGERY
+var s2 = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+  .filterBounds(roi)//FILTER BOUNDS TO ROI
+  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 10)); // FETCH IMAGERY WITH LITTLE TO NO CLOUDS
+
+var s2_before = s2.filterDate(before_start,before_end); // PRE FLOOD IMAGERY
+var s2_after = s2.filterDate(after_start,after_end);  // POST FLOOD IMAGERY
+
+//CREATING FUNCTION TO GENERATE NDWI
+function computeNDWI(image) {
+  return image.normalizedDifference(['B3', 'B8']).rename('NDWI');
+}
+
+//MAPPING THE SENTINEL-2 IMAGERY TO THE FUNCTION
+var ndwi_before = s2_before.map(computeNDWI).max().clip(roi);
+var ndwi_after = s2_after.map(computeNDWI).max().clip(roi);
+
+//CREATING MY NDWI RATIO
+var ndwi_ratio = ndwi_after.divide(ndwi_before).rename('NDWI_Ratio');
+
+// GENERATING NDWI THRESHOLD BASED ON PERCENTILES
+function applyPercentileNDWI(img, region, percentile) {
+  var bandName = img.bandNames().get(0);
+
+  var threshold = img.reduceRegion({
+    reducer: ee.Reducer.percentile([percentile]),
+    geometry: region,
+    scale: 10,
+    maxPixels: 1e13
+  }).get(bandName);
+
+  return img.gt(ee.Image.constant(threshold)).rename(['Flooded_NDWI']).selfMask();
+}
+
+var ndwi_flood_mask = applyPercentileNDWI(ndwi_ratio, roi, 90);
+Map.addLayer(ndwi_flood_mask, {min: 0, max: 1, palette: ['blue']}, 'Flood Mask - NDWI Ratio');
+
+// CREATING FIRST FUSION MASK OF SAR AND NDWI TO GET FLOODED REGIONS DEPICTED BY BOTH
+// SAR AND NDWI SIMULTANEOUSLY
+var intersectionFloodMask1 = dynamicFlood.multiply(ndwi_flood_mask)
+  .rename('Confirmed_Flooded').selfMask();
+
+Map.addLayer(intersectionFloodMask1, {min: 0, max: 1, palette: ['gold']}, 'Flood Mask - Intersect (Both SAR AND NDWI)');
+
+//CREATING A FUSION FLOOD MASK WHERE WE UNIONISE FLOODED AREAS OBTAINED BY NDWI AND SAR
+var intersectionFloodMask2 = dynamicFlood.unmask(0)
+  .add(ndwi_flood_mask.unmask(0))
+  .gt(0) // keeps any pixel detected by at least one sensor
+  .rename('Fused_Flood')
+  .selfMask();
+
+Map.addLayer(intersectionFloodMask2, {min: 0, max: 1, palette: ['purple']}, 'Flood Mask - Fused (Union)');
+//THE VARIOUS FLOOD MASKS CREATED ARE TWO VISUALISE THE BEST APPROACH TO TAKE. BASED ON RESULTS ABOVE, A COMBINATION OF FIRST FUSION FLOOD
+//MASK AND THE SAR FLOOD MASK SEEMS PROFICIENT
